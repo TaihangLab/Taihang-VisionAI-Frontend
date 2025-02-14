@@ -24,7 +24,7 @@
           auto-complete="off"
           :placeholder="proxy.$t('login.password')"
           @keyup.enter="handleLogin"
-        >
+        > 
           <template #prefix><svg-icon icon-class="password" class="el-input__icon input-icon" /></template>
         </el-input>
       </el-form-item>
@@ -35,13 +35,13 @@
           auto-complete="off"
           :placeholder="proxy.$t('login.code')"
           style="width: 63%"
-          @keyup.enter="handleLogin"
+          @keyup.enter="handleLogin" 
         >
           <template #prefix><svg-icon icon-class="validCode" class="el-input__icon input-icon" /></template>
         </el-input>
         <div class="login-code">
           <img :src="codeUrl" class="login-code-img" @click="getCode" />
-        </div>
+        </div> 
       </el-form-item>
       <el-checkbox v-model="loginForm.rememberMe" style="margin: 0 0 25px 0">{{ proxy.$t('login.rememberPassword') }}</el-checkbox>
       <el-form-item style="float: right">
