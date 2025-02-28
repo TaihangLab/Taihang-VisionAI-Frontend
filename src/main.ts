@@ -42,6 +42,9 @@ VXETable.config({
 import { ElDialog } from 'element-plus';
 ElDialog.props.closeOnClickModal.default = false;
 
+import ElementPlus from 'element-plus';
+import 'element-plus/dist/index.css';
+
 const app = createApp(App);
 
 app.use(HighLight);
@@ -53,5 +56,6 @@ app.use(VXETable);
 app.use(plugins);
 // 自定义指令
 directive(app);
+app.use(ElementPlus);
 
 app.mount('#app');
