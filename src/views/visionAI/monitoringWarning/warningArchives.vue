@@ -296,14 +296,22 @@ function handleSaveEdit() {
     <!-- 左侧列表区域 -->
     <div class="archives-list">
       <div class="list-header">
-        <div class="header-left">
-          <h2>预警档案</h2>
-          <button class="batch-delete" @click="batchDelete" 
-                  :class="{ 'active': selectedRows.length > 0 }">
+        <h2>预警档案</h2>
+        <div class="header-buttons">
+          <el-button 
+            type="danger" 
+            class="batch-delete" 
+            @click="batchDelete" 
+            :disabled="selectedRows.length === 0">
             批量删除
-          </button>
+          </el-button>
+          <el-button 
+            type="primary" 
+            class="add-btn" 
+            @click="handleAdd">
+            + 添加预警
+          </el-button>
         </div>
-        <button class="add-btn" @click="handleAdd">+ 添加预警</button>
       </div>
       
       <div class="list-content">
@@ -313,20 +321,22 @@ function handleSaveEdit() {
           @selection-change="handleSelectionChange"
         >
           <el-table-column type="selection" width="55" />
-          <el-table-column label="序号" width="80">
+          <el-table-column label="序号" width="80" align="center">
             <template #default="scope">
               {{ (pagination.currentPage - 1) * pagination.pageSize + scope.$index + 1 }}
             </template>
           </el-table-column>
-          <el-table-column label="预警名称" prop="name" />
-          <el-table-column label="预警图片">
+          <el-table-column label="预警名称" prop="name" align="center" />
+          <el-table-column label="预警图片" align="center">
             <template #default="scope">
-              <img :src="scope.row.image" alt="预警图片" class="preview-img" />
+              <div class="image-box">
+                <span>预警图片</span>
+              </div>
             </template>
           </el-table-column>
-          <el-table-column label="设备名称" prop="deviceName" />
-          <el-table-column label="预警时间" prop="warningTime" />
-          <el-table-column label="预警等级">
+          <el-table-column label="设备名称" prop="deviceName" align="center" />
+          <el-table-column label="预警时间" prop="warningTime" align="center" />
+          <el-table-column label="预警等级" align="center">
             <template #default="scope">
               <el-tag :type="scope.row.warningLevel === 'high' ? 'danger' : 
                             scope.row.warningLevel === 'medium' ? 'warning' : 'success'">
@@ -334,7 +344,7 @@ function handleSaveEdit() {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="150">
+          <el-table-column label="操作" width="150" align="center">
             <template #default="scope">
               <el-button type="text" @click="showDetail(scope.row)">详情</el-button>
               <el-button type="text" class="delete-btn" @click="deleteArchive(scope.row.id)">
@@ -363,20 +373,14 @@ function handleSaveEdit() {
     <div class="archive-info">
       <div class="info-header">
         <h3>档案基本信息</h3>
-        <template v-if="!isEditing">
-          <el-button type="primary" link @click="handleEdit">编辑</el-button>
-        </template>
-        <template v-else>
-          <div class="edit-actions">
-            <el-button type="primary" link @click="handleSave">保存</el-button>
-            <el-button link @click="handleCancel">取消</el-button>
-          </div>
-        </template>
+        <el-button type="primary" link @click="initEditForm">编辑</el-button>
       </div>
       
       <div class="info-content">
         <div class="preview-image">
-          <img :src="archiveInfo.image" alt="预览图片" />
+          <div class="image-box">
+            <span>预览图片</span>
+          </div>
         </div>
         
         <div class="info-items">
@@ -413,7 +417,9 @@ function handleSaveEdit() {
     >
       <div class="warning-detail" v-if="currentDetail">
         <div class="detail-image">
-          <img :src="currentDetail.image" alt="预警图片" />
+          <div class="image-box">
+            <span>预警图片</span>
+          </div>
         </div>
         <div class="detail-info">
           <div class="detail-item">
@@ -530,47 +536,67 @@ function handleSaveEdit() {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 16px 24px;
+      padding: 16px;
       border-bottom: 1px solid #eee;
       
-      .header-left {
+      h2 {
+        margin: 0;
+        flex-grow: 1;
+        text-align: left;
+      }
+      
+      .header-buttons {
         display: flex;
-        align-items: center;
-        gap: 16px;
+        gap: 12px;
+      }
+      
+      .batch-delete {
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        color: white;
+        background-color: #ff4d4f;
+        cursor: pointer;
+        transition: background-color 0.3s;
         
-        h2 {
-          margin: 0;
-          font-size: 18px;
-          color: #1a1f3d;
-        }
-        
-        .batch-delete {
-          padding: 6px 12px;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-          color: #666;
-          background: transparent;
-          cursor: pointer;
-          
-          &.active {
-            border-color: #ff4d4f;
-            color: #ff4d4f;
-          }
+        &:hover {
+          background-color: #e03e3e;
         }
       }
       
       .add-btn {
-        background: #4318ff;
-        color: white;
+        padding: 6px 12px;
         border: none;
-        padding: 8px 16px;
         border-radius: 4px;
+        color: white;
+        background-color: #409eff;
         cursor: pointer;
-        transition: all 0.3s;
+        transition: background-color 0.3s;
         
         &:hover {
-          background: darken(#4318ff, 10%);
+          background-color: #66b1ff;
         }
+      }
+    }
+    
+    .list-content {
+      .el-table {
+        th {
+          text-align: center;
+        }
+      }
+      
+      .image-box {
+        width: 80px;
+        height: 60px;
+        background: #e6f7ff;
+        border: 1px dashed #91d5ff;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #1890ff;
+        font-size: 12px;
       }
     }
   }
@@ -601,11 +627,17 @@ function handleSaveEdit() {
       .preview-image {
         margin-bottom: 24px;
         
-        img {
+        .image-box {
           width: 100%;
           height: 200px;
-          object-fit: cover;
+          background: #e6f7ff;
+          border: 1px dashed #91d5ff;
           border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #1890ff;
+          font-size: 12px;
         }
       }
       
@@ -680,11 +712,17 @@ function handleSaveEdit() {
   .detail-image {
     margin-bottom: 20px;
     
-    img {
+    .image-box {
       width: 100%;
       height: 300px;
-      object-fit: cover;
+      background: #e6f7ff;
+      border: 1px dashed #91d5ff;
       border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #1890ff;
+      font-size: 12px;
     }
   }
   

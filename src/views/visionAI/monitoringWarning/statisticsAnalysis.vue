@@ -242,7 +242,7 @@ const refreshData = async () => {
         { value: 0, name: '一级预警', count: 0 }
       ]
     }
-
+ 
     // 确保数据类型匹配
     const newStatistics: StatisticsData = {
       totalCount: mockData.statistics.totalCount,
@@ -250,10 +250,10 @@ const refreshData = async () => {
       warningCount: mockData.statistics.warningCount,
       processedCount: mockData.statistics.processedCount
     }
-
+  
     // 更新数据
     statisticsData.value = newStatistics
-    
+  
     // 获取所有图表实例
     const trendChart = echarts.getInstanceByDom(document.getElementById('trendChart') as HTMLElement)
     const typeChart = echarts.getInstanceByDom(document.getElementById('warningTypeChart') as HTMLElement)

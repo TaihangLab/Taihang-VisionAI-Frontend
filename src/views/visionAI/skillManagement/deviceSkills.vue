@@ -34,7 +34,7 @@ const skillTypes = computed(() => {
 })
 
 // 筛选后的技能列表
-const filteredSkills = computed(() => {
+const filteredSkills = computed<Skill[]>(() => {
   return skillsList.value.filter(skill => {
     const matchStatus = !filterStatus.value || skill.status === filterStatus.value
     const matchType = !filterType.value || skill.type === filterType.value
@@ -62,6 +62,8 @@ const resetFilters = () => {
 // 处理搜索
 const handleSearch = () => {
   currentPage.value = 1 // 重置页码
+  // 触发计算属性更新
+  filteredSkills.value // 访问计算属性以触发更新
 }
 
 // 获取技能列表数据
@@ -243,7 +245,6 @@ onMounted(() => {
                 v-model="filterStatus" 
                 placeholder="选择状态"
                 clearable
-                @change="handleSearch"
               >
                 <el-option label="已发布" value="published" />
                 <el-option label="未发布" value="unpublished" />
@@ -254,7 +255,6 @@ onMounted(() => {
                 v-model="filterType" 
                 placeholder="选择类型"
                 clearable
-                @change="handleSearch"
               >
                 <el-option 
                   v-for="type in skillTypes" 
@@ -265,7 +265,7 @@ onMounted(() => {
               </el-select>
             </el-form-item>
             <el-form-item>
-              <!-- <el-button type="primary" @click="handleSearch">搜索</el-button> -->
+              <el-button type="primary" @click="handleSearch">搜索</el-button>
               <el-button @click="resetFilters">重置</el-button>
             </el-form-item>
           </el-form>
@@ -276,12 +276,9 @@ onMounted(() => {
             placeholder="搜索技能名称"
             prefix-icon="Search"
             clearable
-            @input="handleSearch"
           >
             <template #append>
-              <el-button @click="handleSearch">
-                <el-icon><Search /></el-icon>
-              </el-button>
+              <el-button @click="handleSearch">搜索</el-button>
             </template>
           </el-input>
         </el-col>
@@ -323,14 +320,14 @@ onMounted(() => {
         </el-col>
       </el-row>
     </div>
-
+  
     <!-- 分页 -->
     <div class="pagination">
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[12, 24, 36, 48]"
+        :total="filteredSkills.length"
+        :page-sizes="[10, 20, 30, 50]"
         layout="total, sizes, prev, pager, next, jumper"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
