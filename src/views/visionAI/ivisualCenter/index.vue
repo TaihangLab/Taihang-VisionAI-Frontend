@@ -1,7 +1,7 @@
 <template>
   <div class="visual-center" ref="visualCenter">
     <div class="top-bar">
-      <div class="time">{{ format(new Date(), 'yyyy-MM-dd HH:mm:ss') }}</div>
+      <div class="time">{{ currentDetailTime }}</div>
       <div class="title">
         <span>太行视觉AI监控中心</span>
       </div>
@@ -360,13 +360,25 @@ const getCurrentPosition = () => {
 fetchWeatherData();
 fetchSystemStatus();
 
-// 定期更新数据
+// 更新当前时间的函数
+const updateCurrentTime = () => {
+  const newTime = format(new Date(), 'yyyy-MM-dd HH:mm:ss');
+  console.log('更新时间:', newTime);
+  currentDetailTime.value = newTime;
+};
+
+// 立即执行一次时间更新
+updateCurrentTime();
+
+// 定义定时器变量
 const weatherTimer = setInterval(fetchWeatherData, 5 * 60 * 1000); // 每5分钟更新天气
 const statusTimer = setInterval(fetchSystemStatus, 30 * 1000); // 每30秒更新系统状态
+let timeTimer = setInterval(updateCurrentTime, 1000); // 每秒更新一次时间
 
 onUnmounted(() => {
   clearInterval(weatherTimer);
   clearInterval(statusTimer);
+  clearInterval(timeTimer); // 确保清理时间更新定时器
 });
 
 // 全屏状态
@@ -406,6 +418,15 @@ const toggleFullscreen = async () => {
 
 // 监听全屏变化
 onMounted(() => {
+  // 确认定时器是否正常工作
+  console.log('页面已挂载，检查定时器是否工作');
+  if (!timeTimer) {
+    console.warn('时间定时器未正常启动，重新启动');
+    // 如果定时器不存在，重新创建
+    updateCurrentTime();
+    timeTimer = setInterval(updateCurrentTime, 1000);
+  }
+
   document.addEventListener('fullscreenchange', () => {
     isFullscreen.value = !!document.fullscreenElement;
     
@@ -437,6 +458,10 @@ onMounted(() => {
   init3DFactory();
   
   window.addEventListener('resize', handleResize);
+
+  // 立即获取数据
+  fetchWeatherData();
+  fetchSystemStatus();
 });
 
 onUnmounted(() => {
