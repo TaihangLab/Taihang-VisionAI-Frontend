@@ -162,20 +162,13 @@
             <div class="panel-title">预警处理情况</div>
             <div class="status-tabs">
               <div 
-                class="tab-item" 
-                :class="{ active: statusTimeRange === 'day' }"
-                @click="changeStatusTimeRange('day')"
-              >本日</div>
-              <div 
-                class="tab-item" 
-                :class="{ active: statusTimeRange === 'week' }"
-                @click="changeStatusTimeRange('week')"
-              >本周</div>
-              <div 
-                class="tab-item" 
-                :class="{ active: statusTimeRange === 'month' }"
-                @click="changeStatusTimeRange('month')"
-              >本月</div>
+                v-for="(label, key) in { day: '本日', week: '本周', month: '本月' }" 
+                :key="key"
+                :class="['tab-item', { active: statusTimeRange === key }]"
+                @click="changeStatusTimeRange(key)"
+              >
+                {{ label }}
+              </div>
             </div>
             <div class="status-chart" ref="statusChart"></div>
           </div>
@@ -201,25 +194,25 @@
             <div class="panel-title">设备预警数量 Top 10</div>
             <div class="device-tabs">
               <div 
-                class="tab-item" 
-                :class="{ active: deviceTimeRange === 'day' }"
-                @click="changeDeviceTimeRange('day')"
-              >本日</div>
-              <div 
-                class="tab-item" 
-                :class="{ active: deviceTimeRange === 'week' }"
-                @click="changeDeviceTimeRange('week')"
-              >本周</div>
-              <div 
-                class="tab-item" 
-                :class="{ active: deviceTimeRange === 'month' }"
-                @click="changeDeviceTimeRange('month')"
-              >本月</div>
+                v-for="(label, key) in { day: '本日', week: '本周', month: '本月' }" 
+                :key="key"
+                :class="['tab-item', { active: deviceTimeRange === key }]"
+                @click="changeDeviceTimeRange(key)"
+              >
+                {{ label }}
+              </div>
             </div>
+              
             <div class="device-table">
-              <el-table :data="deviceWarnings" style="width: 100%" :header-cell-style="headerCellStyle" height="320">
-                <el-table-column prop="name" label="设备名称" min-width="150" />
-                <el-table-column prop="count" label="预警数量" width="120" align="right" />
+              <el-table
+                :data="deviceWarnings"
+                :header-cell-style="headerCellStyle"
+                :cell-style="{ background: 'transparent', color: '#7EAEE5', borderBottom: '1px solid rgba(35, 88, 148, 0.3)' }"
+                style="width: 100%"
+                height="280"
+              >
+                <el-table-column prop="name" label="设备位置" width="180" />
+                <el-table-column prop="count" label="预警数量" align="center" />
               </el-table>
             </div>
           </div>
@@ -386,9 +379,25 @@ const toggleFullscreen = async () => {
     if (!document.fullscreenElement) {
       await visualCenter.value?.requestFullscreen();
       isFullscreen.value = true;
+      
+      // 全屏模式下添加延时，等待DOM完成渲染后调整图表大小
+      setTimeout(() => {
+        trendChart?.resize();
+        levelChart?.resize();
+        statusChart?.resize();
+        onWindowResize();
+      }, 300);
     } else {
       await document.exitFullscreen();
       isFullscreen.value = false;
+      
+      // 退出全屏模式后也需要调整图表大小
+      setTimeout(() => {
+        trendChart?.resize();
+        levelChart?.resize();
+        statusChart?.resize();
+        onWindowResize();
+      }, 300);
     }
   } catch (err) {
     console.error('全屏切换失败:', err);
@@ -399,16 +408,29 @@ const toggleFullscreen = async () => {
 onMounted(() => {
   document.addEventListener('fullscreenchange', () => {
     isFullscreen.value = !!document.fullscreenElement;
+    
+    // 全屏状态变化后，重新调整图表大小
+    setTimeout(() => {
+      trendChart?.resize();
+      levelChart?.resize();
+      statusChart?.resize();
+      onWindowResize();
+    }, 300);
   });
   
   // 初始化图表 - 使用nextTick确保DOM已经渲染
   nextTick(() => {
-    initTrendChart();
-    initLevelChart();
-    initStatusChart();
-    
-    // 初始化数据 - 确保在图表初始化后调用
-    updateDeviceTable();
+    console.log('开始初始化图表');
+    try {
+      initTrendChart();
+      initLevelChart();
+      initStatusChart();
+      
+      // 初始化数据 - 确保在图表初始化后调用
+      updateDeviceTable();
+    } catch (error) {
+      console.error('图表初始化失败:', error);
+    }
   });
   
   // 初始化3D工厂地图
@@ -560,9 +582,14 @@ const handleResize = () => {
   // 使用防抖函数处理resize事件
   if (resizeTimer) clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
+    console.log('窗口大小改变，重新调整图表大小');
+    // 调整所有图表大小
     trendChart?.resize();
     levelChart?.resize();
     statusChart?.resize();
+    
+    // 调整3D地图大小
+    onWindowResize();
   }, 100);
 };
 
@@ -691,9 +718,26 @@ const initLevelChart = () => {
 // 完全重写初始化和更新函数
 const initStatusChart = () => {
   const chartDom = document.querySelector('.status-chart') as HTMLElement;
-  if (!chartDom) return;
+  if (!chartDom) {
+    console.error('未找到图表DOM元素');
+    return;
+  }
   
+  // 检查是否已有实例并销毁
+  if (statusChart) {
+    try {
+      statusChart.dispose();
+    } catch (e) {
+      console.warn('销毁旧图表实例失败:', e);
+    }
+  }
+  
+  // 创建新的图表实例
   statusChart = echarts.init(chartDom);
+  
+  // 获取当前时间范围的数据
+  const currentData = statusData[statusTimeRange.value];
+  console.log('初始化图表使用数据:', statusTimeRange.value, currentData);
   
   // 初始化图表配置
   const option = {
@@ -711,71 +755,7 @@ const initStatusChart = () => {
     series: [{
       name: '处理状态',
       type: 'pie',
-      radius: ['60%', '80%'],
-      center: ['50%', '45%'],
-      avoidLabelOverlap: false,
-      itemStyle: {
-        borderRadius: 4,
-        borderColor: 'rgba(0, 0, 0, 0.1)',
-        borderWidth: 2
-      },
-      label: {
-        show: false
-      },
-      emphasis: {
-        label: {
-          show: true,
-          fontSize: 14,
-          fontWeight: 'bold',
-          color: '#00FFFF'
-        },
-        itemStyle: {
-          shadowBlur: 10,
-          shadowOffsetX: 0,
-          shadowColor: 'rgba(0, 0, 0, 0.5)'
-        }
-      },
-      data: statusData.day // 默认显示日数据
-    }]
-  };
-  
-  // 设置初始配置
-  statusChart.setOption(option);
-}
-
-// Function to update the status chart
-const updateStatusChart = () => {
-  if (!statusChart) {
-    console.error('状态图表未初始化');
-    return;
-  }
-  
-  const currentRange = statusTimeRange.value;
-  const currentData = statusData[currentRange];
-  console.log('更新状态图表:', currentRange, currentData);
-  
-  // 确保数据存在
-  if (!currentData || !Array.isArray(currentData)) {
-    console.error('状态数据不存在或格式不正确:', currentRange, currentData);
-    return;
-  }
-  
-  const option = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{a} <br/>{b}: {c} ({d}%)'
-    },
-    legend: {
-      orient: 'horizontal',
-      bottom: 10,
-      textStyle: { color: '#7EAEE5' },
-      itemWidth: 12,
-      itemHeight: 12
-    },
-    series: [{
-      name: '处理状态',
-      type: 'pie',
-      radius: ['60%', '80%'],
+      radius: ['50%', '70%'], // 缩小半径确保在小容器中也能完整显示
       center: ['50%', '45%'],
       avoidLabelOverlap: false,
       itemStyle: {
@@ -803,21 +783,126 @@ const updateStatusChart = () => {
     }]
   };
   
-  // 使用notMerge: true确保完全替换配置而不是合并
-  statusChart.setOption(option, { notMerge: true });
+  try {
+    // 设置初始配置
+    statusChart.setOption(option);
+    console.log('图表初始化成功');
+  } catch (error) {
+    console.error('图表初始化失败:', error);
+  }
+  
+  // 监听容器大小变化
+  window.addEventListener('resize', () => {
+    statusChart?.resize();
+  });
+}
+
+// Function to update the status chart
+const updateStatusChart = () => {
+  if (!statusChart) {
+    console.error('状态图表未初始化');
+    initStatusChart(); // 尝试重新初始化
+    return;
+  }
+  
+  try {
+    const currentRange = statusTimeRange.value;
+    const currentData = statusData[currentRange];
+    console.log('更新状态图表:', currentRange, currentData);
+    
+    // 确保数据存在
+    if (!currentData || !Array.isArray(currentData)) {
+      console.error('状态数据不存在或格式不正确:', currentRange, currentData);
+      return;
+    }
+    
+    const option = {
+      tooltip: {
+        trigger: 'item',
+        formatter: '{a} <br/>{b}: {c} ({d}%)'
+      },
+      legend: {
+        orient: 'horizontal',
+        bottom: 10,
+        textStyle: { color: '#7EAEE5' },
+        itemWidth: 12,
+        itemHeight: 12
+      },
+      series: [{
+        name: '处理状态',
+        type: 'pie',
+        radius: ['60%', '80%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 4,
+          borderColor: 'rgba(0, 0, 0, 0.1)',
+          borderWidth: 2
+        },
+        label: {
+          show: false
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 14,
+            fontWeight: 'bold',
+            color: '#00FFFF'
+          },
+          itemStyle: {
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.5)'
+          }
+        },
+        data: currentData
+      }]
+    };
+    
+    // 使用notMerge: true确保完全替换配置而不是合并
+    statusChart.setOption(option, { notMerge: true });
+    console.log('图表更新成功');
+  } catch (error) {
+    console.error('更新状态图表失败:', error);
+    // 尝试重新初始化
+    initStatusChart();
+  }
 }
 
 // Function to change the time range
 const changeStatusTimeRange = (range) => {
+  // 记录变更日志
   console.log('切换状态时间范围:', range);
+  // 更新状态范围
   statusTimeRange.value = range;
   
-  // 使用nextTick确保DOM更新后再更新图表
+  // 立即更新图表
   nextTick(() => {
-    console.log('nextTick中更新图表，当前范围:', statusTimeRange.value);
-    updateStatusChart();
+    // 确保DOM已更新后再执行更新
+    if (statusChart) {
+      // 获取对应数据
+      const currentData = statusData[range];
+      console.log('更新状态图表数据:', currentData);
+      
+      try {
+        // 直接更新图表数据
+        statusChart.setOption({
+          series: [{
+            data: currentData
+          }]
+        }, true); // 使用true确保完全替换数据
+      } catch (error) {
+        console.error('更新图表失败:', error);
+        // 尝试重新初始化图表
+        initStatusChart();
+      }
+    } else {
+      console.warn('图表实例不存在，尝试重新初始化');
+      // 尝试重新初始化图表
+      initStatusChart();
+    }
   });
-}
+};
 
 // 初始化3D工厂地图
 const init3DFactory = () => {
@@ -1024,10 +1109,17 @@ const onWindowResize = () => {
   const width = container.clientWidth;
   const height = container.clientHeight;
   
+  // 更新相机
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   
+  // 更新渲染器尺寸
   renderer.setSize(width, height);
+  
+  // 重新渲染场景
+  if (scene && camera) {
+    renderer.render(scene, camera);
+  }
 };
 
 // 动画循环
@@ -1974,35 +2066,110 @@ const deviceWarningsData = reactive({
   }
 }
 
-// 删除之前的全屏样式，改用 mixin
+// 更新全屏样式
 @mixin fullscreen-styles {
   background: linear-gradient(135deg, #001529 0%, #000B18 100%);
-  padding: 30px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: auto;
+  
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    
+    // 调整底部区域布局
+    .bottom-section {
+      flex: 1;
+      min-height: 40vh;
+      margin-top: 20px;
+      display: flex;
+      
+      // 确保每个底部面板高度一致
+      .status-panel,
+      .list-panel,
+      .device-panel {
+        height: auto;
+        display: flex;
+        flex-direction: column;
+        
+        // 调整面板标题和选项卡高度
+        .panel-title {
+          flex-shrink: 0;
+        }
+        
+        .status-tabs,
+        .device-tabs {
+          flex-shrink: 0;
+        }
+        
+        // 确保图表和表格占用剩余空间
+        .status-chart,
+        .warning-table,
+        .device-table {
+          flex: 1;
+          min-height: 200px;
+          overflow: hidden;
+        }
+        
+        // 为图表设置最小高度
+        .status-chart {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 250px;
+        }
+      }
+    }
+  }
   
   .panel-box {
     backdrop-filter: blur(20px);
+    height: auto;
   }
   
-  .map-container {
-    height: 500px;
+  // 调整地图面板自适应
+  .map-panel {
+    height: 55vh;
+    min-height: 400px;
+    
+    .map-container {
+      height: calc(100% - 150px);
+      min-height: 300px;
+    }
   }
   
   // 全屏模式下调整图表高度
   .trend-chart,
-  .level-chart,
+  .level-chart {
+    height: 25vh;
+    min-height: 200px;
+  }
+  
+  // 修改预警处理情况图表的高度计算
   .status-chart {
-    height: 300px;
+    height: auto !important;
+    min-height: 230px !important;
   }
   
-  // 全屏模式下调整表格高度
-  .status-panel,
-  .list-panel,
-  .device-panel {
-    height: 400px;
+  // 修改表格容器高度
+  .warning-table,
+  .device-table {
+    height: auto !important;
+    
+    :deep(.el-table) {
+      height: auto !important;
+      max-height: 300px;
+    }
   }
   
-  .bottom-section .el-table {
-    height: 320px !important;
+  // 调整map-info位置
+  .map-info {
+    max-width: 280px;
+    overflow: auto;
   }
 }
 
@@ -2021,4 +2188,120 @@ const deviceWarningsData = reactive({
 .visual-center:-ms-fullscreen {
   @include fullscreen-styles;
 }
+
+.device-warning-list {
+  background: linear-gradient(180deg, rgba(6, 30, 93, 0.8) 0%, rgba(4, 20, 63, 0.9) 100%);
+  border: 1px solid rgba(35, 88, 148, 0.5);
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+  position: relative;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+
+  .device-warning-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(35, 88, 148, 0.3);
+    
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .device-name {
+      color: #7EAEE5;
+      font-size: 14px;
+    }
+
+    .device-count {
+      color: #00FFFF;
+      font-size: 14px;
+      font-weight: bold;
+    }
+  }
+}
+
+// 添加表格行悬浮效果
+.device-table {
+  // ... existing styles ...
+  
+  :deep(.table-row-hover) {
+    &:hover {
+      td {
+        background: linear-gradient(180deg, rgba(0, 255, 255, 0.1) 0%, rgba(0, 255, 255, 0.05) 100%) !important;
+        box-shadow: 0 0 15px rgba(0, 255, 255, 0.1);
+      }
+    }
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    td {
+      background: transparent !important;
+      border-bottom: 1px solid rgba(35, 88, 148, 0.3);
+      color: #7eaee5;
+      padding: 12px 0;
+      transition: all 0.3s;
+    }
+    
+    tr {
+      background: transparent !important;
+    }
+  }
+}
+
+// ... existing styles ...
+
+// 修改表格行悬浮效果，使其与预警记录表格完全一致
+.device-table {
+  // ... existing styles ...
+  
+  :deep(.el-table__body tr:hover > td) {
+    background-color: rgba(0, 255, 255, 0.1) !important;
+    cursor: pointer;
+  }
+  
+  :deep(.el-table__body tr) {
+    background: transparent !important;
+    transition: all 0.3s;
+    
+    td {
+      background: transparent !important;
+      border-bottom: 1px solid rgba(35, 88, 148, 0.3);
+      color: #7eaee5;
+      padding: 12px 0;
+      transition: all 0.3s;
+    }
+  }
+  
+  // 确保表格背景透明
+  :deep(.el-table, .el-table__inner-wrapper, .el-table__body, .el-table__header) {
+    background-color: transparent !important;
+  }
+  
+  // 确保表格边框样式一致
+  :deep(.el-table::before, .el-table::after) {
+    display: none;
+  }
+}
+
+// 确保两个表格使用相同的样式
+.warning-table,
+.device-table {
+  position: relative;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.3), transparent);
+  }
+}
+
+// ... existing styles ...
 </style>
