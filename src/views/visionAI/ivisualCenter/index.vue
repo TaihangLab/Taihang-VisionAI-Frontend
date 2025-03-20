@@ -2074,36 +2074,50 @@ const deviceWarningsData = reactive({
   flex-direction: column;
   height: 100vh;
   width: 100vw;
-  overflow: auto;
+  overflow: hidden;
   
   .main-content {
     flex: 1;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    
+    // 调整el-row样式，确保不溢出
+    .el-row {
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      height: 100%;
+    }
     
     // 调整底部区域布局
     .bottom-section {
-      flex: 1;
-      min-height: 40vh;
+      flex: 0 0 auto; // 修改为固定高度而非flex:1
+      height: 360px; // 确保底部区域有固定高度
       margin-top: 20px;
       display: flex;
+      overflow: hidden;
       
       // 确保每个底部面板高度一致
       .status-panel,
       .list-panel,
       .device-panel {
-        height: auto;
+        height: 360px; // 恢复为固定高度
+        flex: 1;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
         
         // 调整面板标题和选项卡高度
         .panel-title {
           flex-shrink: 0;
+          height: 30px;
+          margin-bottom: 15px;
         }
         
         .status-tabs,
         .device-tabs {
           flex-shrink: 0;
+          height: 35px;
         }
         
         // 确保图表和表格占用剩余空间
@@ -2111,16 +2125,16 @@ const deviceWarningsData = reactive({
         .warning-table,
         .device-table {
           flex: 1;
-          min-height: 200px;
+          height: calc(100% - 80px); // 减去标题和选项卡的高度
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
         
-        // 为图表设置最小高度
-        .status-chart {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 250px;
+        // 为表格设置具体高度
+        :deep(.el-table) {
+          height: 280px !important; // 确保表格有固定高度
+          max-height: 280px;
         }
       }
     }
@@ -2129,11 +2143,12 @@ const deviceWarningsData = reactive({
   .panel-box {
     backdrop-filter: blur(20px);
     height: auto;
+    min-height: auto; // 确保不会被设置最小高度
   }
   
   // 调整地图面板自适应
   .map-panel {
-    height: 55vh;
+    height: calc(55vh - 20px);
     min-height: 400px;
     
     .map-container {
@@ -2145,26 +2160,25 @@ const deviceWarningsData = reactive({
   // 全屏模式下调整图表高度
   .trend-chart,
   .level-chart {
-    height: 25vh;
+    height: calc(25vh - 20px);
     min-height: 200px;
   }
   
-  // 修改预警处理情况图表的高度计算
-  .status-chart {
-    height: auto !important;
-    min-height: 230px !important;
-  }
+  // 移除这些可能会覆盖正确设置的样式
+  // .status-chart {
+  //   height: auto !important;
+  //   min-height: 230px !important;
+  // }
   
-  // 修改表格容器高度
-  .warning-table,
-  .device-table {
-    height: auto !important;
-    
-    :deep(.el-table) {
-      height: auto !important;
-      max-height: 300px;
-    }
-  }
+  // .warning-table,
+  // .device-table {
+  //   height: auto !important;
+  //   
+  //   :deep(.el-table) {
+  //     height: auto !important;
+  //     max-height: 300px;
+  //   }
+  // }
   
   // 调整map-info位置
   .map-info {
