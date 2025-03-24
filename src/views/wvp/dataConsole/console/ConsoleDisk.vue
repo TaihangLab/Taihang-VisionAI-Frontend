@@ -55,12 +55,16 @@ const option = {
       const used = params[0].value;
       const free = params[1].value;
       const total = used + free;
+      const usedPercent = ((used / total) * 100).toFixed(1);
       return `${path}<br/>
-              <span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:#5470c6;"></span>
-              已使用: ${used.toFixed(1)}GB<br/>
-              <span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:#91cc75;"></span>
-              剩余: ${free.toFixed(1)}GB<br/>
+              ${params[0].marker}已使用: ${used.toFixed(1)}GB (${usedPercent}%)<br/>
+              ${params[1].marker}剩余: ${free.toFixed(1)}GB<br/>
               总计: ${total.toFixed(1)}GB`;
+    },
+    backgroundColor: '#5c6b77',
+    borderWidth: 0,
+    textStyle: {
+      color: '#fff'
     }
   },
   xAxis: {
@@ -118,7 +122,15 @@ const option = {
         color: '#5470c6'
       },
       label: {
-        show: false
+        show: true,
+        position: 'inside',
+        formatter: (params: any) => {
+          const total = params.value + option.series[1].data[params.dataIndex];
+          const percent = ((params.value / total) * 100).toFixed(0);
+          return params.value > 0 ? `${percent}%` : '';
+        },
+        fontSize: 10,
+        color: '#FFFFFF'
       },
       emphasis: {
         focus: 'series'
@@ -152,47 +164,184 @@ const initChart = () => {
       chart = echarts.init(chartRef.value)
     }
     chart.setOption(option, true)
+    
+    // 窗口大小变化时自动调整图表大小
+    window.addEventListener('resize', () => {
+      chart?.resize()
+    })
+    
+    console.log('磁盘图表初始化完成')
   }
 }
 
-// 更新图表数据
+/**
+ * 更新图表
+ */
 const updateChart = () => {
   if (!chart) {
-    initChart()
-    if (!chart) return
+    return
   }
   
-  const yAxisData: string[] = []
-  const usedData: number[] = []
-  const freeData: number[] = []
+  console.log('更新磁盘图表数据：', chartData.rows)
   
-  chartData.rows.forEach(item => {
-    yAxisData.push(item.path)
-    usedData.push(item.used)
-    freeData.push(item.free)
-  })
+  const dataSource = chartData.rows.map((item: any) => ({
+    ...item,
+    used: Number(item.used.toFixed(1)),
+    free: Number(item.free.toFixed(1))
+  }))
   
-  chart.setOption({
-    yAxis: {
-      data: yAxisData
-    },
-    series: [
-      {
-        data: usedData
+  // 从数据中获取所有路径
+  const paths = dataSource.map((item: any) => item.path)
+  // 从数据中获取所有已使用值
+  const used = dataSource.map((item: any) => item.used)
+  // 从数据中获取所有剩余值
+  const free = dataSource.map((item: any) => item.free)
+  
+  console.log('路径：', paths)
+  console.log('已用：', used)
+  console.log('可用：', free)
+  
+  // 更新选项
+  option.yAxis.data = paths
+  option.series[0].data = used
+  option.series[1].data = free
+  
+  // 设置图表选项
+  chart.setOption(option, true)
+  
+  console.log('已更新磁盘图表数据')
+  
+  // 添加基准线
+  addBaseline()
+}
+
+/**
+ * 添加基准线
+ */
+const addBaseline = () => {
+  if (!chart) return
+  
+  try {
+    // 获取当前的option配置
+    const currentOption = chart.getOption()
+    
+    // 修改X轴配置，添加0值基准线
+    const xAxisOption = {
+      type: 'value',
+      axisLine: {
+        lineStyle: {
+          color: '#DCDFE6'
+        }
       },
-      {
-        data: freeData
+      axisTick: {
+        lineStyle: {
+          color: '#DCDFE6'
+        }
+      },
+      axisLabel: {
+        fontSize: 10,
+        color: '#606266',
+        formatter: '{value}GB'
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#EBEEF5',
+          type: 'solid'
+        }
+      },
+      // 添加零刻度线高亮
+      minorSplitLine: {
+        show: true,
+        lineStyle: {
+          color: 'rgba(180, 180, 180, 0.5)'
+        }
       }
-    ]
-  })
+    }
+    
+    // 更新配置
+    chart.setOption({
+      xAxis: xAxisOption
+    })
+    
+    console.log('已添加基准线')
+  } catch (error) {
+    console.error('添加基准线失败:', error)
+  }
 }
 
 // 设置数据方法（供父组件调用）
 const setData = (data: any[]) => {
-  chartData.rows = data
+  // 确保数据是数组且有效
+  if (!data || !Array.isArray(data)) {
+    console.warn('磁盘数据无效:', data);
+    return;
+  }
+  
+  // 处理并验证数据
+  const validData = data.map(item => {
+    // 检查路径字段
+    const path = item.path || '未知';
+    
+    // 处理已使用字段 - 可能是used或use
+    let used = 0;
+    if (typeof item.used === 'number') {
+      used = item.used;
+    } else if (typeof item.used === 'string') {
+      used = parseFloat(item.used);
+    } else if (typeof item.use === 'number') {
+      used = item.use;
+    } else if (typeof item.use === 'string') {
+      used = parseFloat(item.use);
+    }
+    
+    // 处理剩余空间字段
+    let free = 0;
+    if (typeof item.free === 'number') {
+      free = item.free;
+    } else if (typeof item.free === 'string') {
+      free = parseFloat(item.free);
+    } else if (typeof item.available === 'number') {
+      free = item.available;
+    } else if (typeof item.available === 'string') {
+      free = parseFloat(item.available);
+    }
+    
+    // 确保值为非负数
+    used = isNaN(used) ? 0 : Math.max(0, used);
+    free = isNaN(free) ? 0 : Math.max(0, free);
+    
+    return { path, used, free };
+  }).filter(item => 
+    // 过滤掉无效数据
+    item.path !== '未知' && (item.used > 0 || item.free > 0)
+  );
+  
+  // 按使用率排序(已使用/总容量)
+  validData.sort((a, b) => {
+    const totalA = a.used + a.free;
+    const totalB = b.used + b.free;
+    const usedPercentA = totalA > 0 ? a.used / totalA : 0;
+    const usedPercentB = totalB > 0 ? b.used / totalB : 0;
+    return usedPercentB - usedPercentA; // 降序排列，使用率高的在上面
+  });
+  
+  if (validData.length === 0) {
+    console.warn('没有有效的磁盘数据');
+    return;
+  }
+  
+  console.log('有效磁盘数据:', validData);
+  
+  // 更新数据
+  chartData.rows = validData;
+  
+  // 下一帧更新图表
   nextTick(() => {
-    updateChart()
-  })
+    if (!chart) {
+      initChart();
+    }
+    updateChart();
+  });
 }
 
 // 组件挂载时初始化图表

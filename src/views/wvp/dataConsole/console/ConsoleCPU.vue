@@ -91,8 +91,31 @@ const option = {
     trigger: 'axis',
     formatter: (params: any) => {
       const param = params[0]
+      const value = parseFloat(param.value).toFixed(2)
       return param.name + "<br/> " 
-        + param.marker + "使用：" + param.value + "%"
+        + '<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:#50a3f8;"></span>' 
+        + "CPU使用率  " + value + "%"
+    },
+    backgroundColor: 'rgba(50, 50, 50, 0.8)',
+    borderWidth: 0,
+    textStyle: {
+      color: '#fff'
+    },
+    axisPointer: {
+      type: 'line',
+      label: {
+        formatter: (params: any) => {
+          const value = params.value;
+          if (typeof value === 'number') {
+            return value.toFixed(2) + '%';
+          }
+          return value;
+        }
+      },
+      lineStyle: {
+        color: '#cccccc',
+        width: 1
+      }
     }
   },
   series: [{
@@ -128,11 +151,16 @@ const option = {
 // 初始化图表
 const initChart = () => {
   if (chartRef.value) {
-    // 确保容器存在
-    if (!chart) {
-      chart = echarts.init(chartRef.value)
+    // 确保图表容器存在
+    try {
+      if (!chart) {
+        chart = echarts.init(chartRef.value)
+      }
+      // 使用克隆的选项以避免引用问题
+      chart.setOption(JSON.parse(JSON.stringify(option)), true)
+    } catch (error) {
+      console.error('初始化CPU图表出错:', error)
     }
-    chart.setOption(option, true)
   }
 }
 
@@ -143,40 +171,115 @@ const updateChart = () => {
     if (!chart) return
   }
   
-  // 处理时间数据
-  const times: string[] = []
-  const values: number[] = []
-  
-  chartData.rows.forEach(item => {
-    // 格式化时间为HH:MM:SS
-    const time = new Date(item.time)
-    const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:${time.getSeconds().toString().padStart(2, '0')}`
-    times.push(timeStr)
-    values.push(item.percent)
-  })
-  
-  // 限制显示最近30个数据点
-  const maxDataPoints = 30
-  if (times.length > maxDataPoints) {
-    times.splice(0, times.length - maxDataPoints)
-    values.splice(0, values.length - maxDataPoints)
-  }
-  
-  chart.setOption({
-    xAxis: {
-      data: times
-    },
-    series: [
-      {
-        data: values
+  try {
+    // 处理时间数据
+    const times: string[] = []
+    const values: number[] = []
+    
+    // 添加详细调试输出
+    console.log('CPU数据详细信息:', JSON.stringify(chartData.rows))
+    
+    chartData.rows.forEach(item => {
+      if (item && typeof item === 'object') {
+        // 确保数据有效
+        if (!item.time) {
+          console.warn('CPU数据缺少time字段:', item)
+          return
+        }
+        
+        // 格式化时间为HH:MM:SS
+        try {
+          let time;
+          if (typeof item.time === 'string' && item.time.includes('-')) {
+            // 如果是标准日期字符串格式 (如 "2023-03-24 12:34:56")
+            const parts = item.time.split(' ');
+            if (parts.length > 1) {
+              // 只保留时间部分
+              times.push(parts[1]);
+            } else {
+              times.push(item.time);
+            }
+          } else {
+            // 如果是时间戳格式
+            time = new Date(item.time);
+            const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:${time.getSeconds().toString().padStart(2, '0')}`;
+            times.push(timeStr);
+          }
+          
+          // 确保percent是数字
+          let percentValue = 0;
+          if (typeof item.percent === 'number') {
+            percentValue = item.percent;
+            
+            // 检查是否为小数形式的百分比(0-1范围)，如是则转换为0-100范围
+            if (percentValue > 0 && percentValue < 1) {
+              percentValue = percentValue * 100;
+              console.log(`将小数形式的百分比 ${item.percent} 转换为 ${percentValue}%`);
+            }
+          } else if (typeof item.percent === 'string') {
+            percentValue = parseFloat(item.percent);
+            
+            // 检查是否为小数形式的百分比
+            if (percentValue > 0 && percentValue < 1) {
+              percentValue = percentValue * 100;
+              console.log(`将字符串形式的小数百分比 ${item.percent} 转换为 ${percentValue}%`);
+            }
+          }
+          
+          // 将百分比值格式化为两位小数
+          percentValue = parseFloat(percentValue.toFixed(2));
+          
+          console.log(`处理CPU数据: 时间=${times[times.length-1]}, percent=${percentValue}, 原始数据:`, JSON.stringify(item));
+          // 确保所有值都是两位小数
+          values.push(parseFloat(percentValue.toFixed(2)));
+        } catch (e) {
+          console.warn('CPU时间格式化错误:', item.time, e)
+        }
       }
-    ]
-  })
+    })
+    
+    // 如果没有足够的数据点，直接使用空数组
+    if (times.length === 0) {
+      console.warn('CPU数据为空，无法渲染图表')
+    }
+    
+    // 限制显示最近30个数据点
+    const maxDataPoints = 30
+    if (times.length > maxDataPoints) {
+      times.splice(0, times.length - maxDataPoints)
+      values.splice(0, values.length - maxDataPoints)
+    }
+    
+    // 使用异步方式更新
+    setTimeout(() => {
+      if (chart) {
+        chart.setOption({
+          xAxis: {
+            data: times
+          },
+          series: [
+            {
+              data: values
+            }
+          ]
+        })
+      }
+    }, 0)
+  } catch (error) {
+    console.error('更新CPU图表数据出错:', error)
+  }
 }
 
 // 设置数据方法（供父组件调用）
 const setData = (data: any[]) => {
-  chartData.rows = data
+  if (!data || !Array.isArray(data)) {
+    console.warn('CPU数据无效:', data)
+    return
+  }
+  
+  // 克隆数据以避免引用问题
+  chartData.rows = JSON.parse(JSON.stringify(data))
+  
   nextTick(() => {
     updateChart()
   })
@@ -195,7 +298,10 @@ onMounted(() => {
 // 处理窗口大小变化
 const handleResize = () => {
   if (chart) {
-    chart.resize()
+    // 使用异步方式调整大小
+    setTimeout(() => {
+      if (chart) chart.resize()
+    }, 0)
   }
 }
 
