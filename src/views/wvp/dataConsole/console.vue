@@ -55,7 +55,7 @@ import ConsoleResource from './console/ConsoleResource.vue'
 axios.defaults.baseURL = 'http://192.168.1.107:18080'
 
 let timer: any = null
-let dataLoaded = ref<boolean>(false)
+const dataLoaded = ref<boolean>(false)
 
 const cpuRef = ref()
 const memoryRef = ref()
