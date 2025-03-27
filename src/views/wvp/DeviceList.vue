@@ -242,8 +242,12 @@
   }
   
   function showChannelList(row) {
-    // 直接跳转到通道列表，参考web_src实现
-    router.push(`/channelList/${row.deviceId}/0`)
+    // 跳转到通道列表页面，并传递设备ID和父通道ID
+    console.log('跳转到通道列表，设备ID:', row.deviceId)
+    router.push({
+      path: `/channelList/${row.deviceId}/0`,
+      query: { from: 'deviceList' } // 添加来源标记，以便于返回
+    })
   }
   
   function refDevice(itemData) {

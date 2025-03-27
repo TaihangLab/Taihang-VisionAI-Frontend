@@ -88,6 +88,29 @@ export const constantRoutes: RouteRecordRaw[] = [
         meta: { title: '个人中心', icon: 'user' }
       }
     ]
+  },
+  // 视频监控路由
+  {
+    path: '/wvp',
+    component: Layout,
+    redirect: '/deviceList',
+    name: 'WVP',
+    meta: { title: '视频监控', icon: 'video-camera' },
+    children: [
+      {
+        path: '/deviceList',
+        component: () => import('@/views/wvp/DeviceList.vue'),
+        name: 'DeviceList',
+        meta: { title: '设备列表', icon: 'list', noCache: true }
+      },
+      {
+        path: '/channelList/:deviceId/:parentChannelId',
+        component: () => import('@/views/wvp/ChannelList.vue'),
+        name: 'ChannelList',
+        meta: { title: '通道列表', icon: 'list', noCache: true, activeMenu: '/deviceList' },
+        hidden: true
+      }
+    ]
   }
 ];
 
