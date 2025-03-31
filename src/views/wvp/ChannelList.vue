@@ -23,7 +23,6 @@
           <div v-if="!showTree" style="display: inline;">
             <el-tag v-if="!deviceId" type="warning" style="margin-right: 1rem;">请选择设备</el-tag>
             <el-tag v-else type="success" style="margin-right: 1rem;">{{ device?.name || deviceId }}</el-tag>
-            <el-button v-if="!apiAvailable" type="warning" style="margin-right: 1rem;" size="small">API连接失败，使用模拟数据</el-button>
             搜索:
             <el-input @input="search" style="margin-right: 1rem; width: auto;" size="small" placeholder="关键字"
                       :prefix-icon="Search" v-model="searchSrt" clearable></el-input>
@@ -236,8 +235,6 @@ const tableHeight = ref('calc(100vh - 200px)')
 const loadSnap = ref({})
 const beforeUrl = ref('/deviceList')
 const tabActiveName = ref('1')
-const apiAvailable = ref(true) // 默认API可用
-const testDeviceId = ref('34020000001320000001') // 测试设备ID
 
 // 云台类型映射
 const ptzTypes = {
@@ -258,17 +255,19 @@ const getPtzTypeText = (type) => {
 
 // 生命周期钩子
 onMounted(() => {
-  // 检查路由参数并设置deviceId
-  console.log('路由参数:', route.params)
+  
   
   // 从路由参数获取deviceId
   if (route.params.deviceId) {
     deviceId.value = String(route.params.deviceId)
-    console.log('从路由获取deviceId:', deviceId.value)
   } else {
-    console.warn('路由中没有deviceId参数，使用测试设备ID')
-    deviceId.value = testDeviceId.value
-    console.log('使用测试deviceId:', deviceId.value)
+    // 如果没有deviceId，提示用户选择设备
+    deviceId.value = ''
+    ElMessage.warning({
+      showClose: true,
+      message: '请从设备列表选择一个设备',
+      duration: 3000
+    })
   }
   
   // 从路由参数获取parentChannelId
@@ -277,33 +276,46 @@ onMounted(() => {
   } else {
     parentChannelId.value = '0'
   }
+
+  // 初始化参数
+  initParam()
   
-  // 检查API是否可用
-  checkApiAvailability().then(isAvailable => {
-    apiAvailable.value = isAvailable
-    console.log('API可用性检测结果:', isAvailable)
-    
-    if (deviceId.value) {
-      getDevice()
+  if (deviceId.value) {
+    // 先获取设备信息，然后在回调中获取通道列表
+    getDevice().then(() => {
       initData()
-    } else {
-      console.error('无法初始化数据，deviceId为空')
-      ElMessage.warning({
+    }).catch(err => {
+      console.error('获取设备信息失败:', err)
+      // 显示错误消息，提示用户重新选择设备
+      ElMessage.error({
         showClose: true,
-        message: '设备ID为空，无法加载通道列表'
+        message: '获取设备信息失败，请返回设备列表重新选择设备',
+        duration: 5000
       })
-    }
-  })
+    })
+  } else {
+    console.error('无法初始化数据，deviceId为空')
+    ElMessage.warning({
+      showClose: true,
+      message: '请从设备列表选择一个设备以查看通道列表',
+      duration: 5000
+    })
+  }
   
   // 添加路由参数变化监听
   watch(
     () => route.params,
     (newParams) => {
-      console.log('路由参数变化:', newParams)
       if (newParams.deviceId) {
         deviceId.value = String(newParams.deviceId)
       } else if (deviceId.value === '') {
-        deviceId.value = testDeviceId.value
+        // 如果没有设备ID，不使用测试ID，而是提示用户
+        ElMessage.warning({
+          showClose: true,
+          message: '请从设备列表选择一个设备',
+          duration: 3000
+        })
+        return // 不继续加载数据
       }
       
       if (newParams.parentChannelId) {
@@ -312,11 +324,41 @@ onMounted(() => {
         parentChannelId.value = '0'
       }
       
+      // 只要路由参数变化，就重新初始化参数
+      initParam()
+      
       if (deviceId.value) {
-        getDevice()
-        initData()
+        getDevice().then(() => initData())
       }
-    }
+    },
+    { immediate: true, deep: true } // 立即触发，深度监听
+  )
+
+  // 修改当前路由变化处理
+  watch(
+    () => route,
+    (newRoute, oldRoute) => {
+      console.log('完整路由对象变化:', 
+        'new path:', newRoute.path, 
+        'old path:', oldRoute?.path,
+        'new params:', newRoute.params, 
+        'new query:', newRoute.query)
+      
+      // 如果路径或参数发生变化，重新初始化
+      if (newRoute.path !== oldRoute?.path || 
+          newRoute.params.deviceId !== oldRoute?.params.deviceId || 
+          newRoute.params.parentChannelId !== oldRoute?.params.parentChannelId ||
+          newRoute.query.t !== oldRoute?.query.t) {
+        // 初始化参数
+        initParam()
+        // 获取设备信息
+        getDevice().then(() => {
+          // 获取通道数据
+          initData()
+        })
+      }
+    },
+    { deep: true, immediate: true }
   )
 })
 
@@ -324,81 +366,46 @@ onUnmounted(() => {
   // 清理工作
 })
 
-// 检查API是否可用
-const checkApiAvailability = async () => {
-  try {
-    console.log('开始检测API可用性...')
-    const response = await axios({
-      method: 'get',
-      url: '/api/server/system/configInfo',
-      timeout: 3000
-    })
-    return response.status === 200
-  } catch (error) {
-    return false
-  }
-}
-
 // 获取设备信息
 const getDevice = () => {
- 
-  // 如果API不可用，直接使用模拟数据
-  if (!apiAvailable.value) {
-    console.log('API不可用，使用模拟设备数据')
-    device.value = {
-      deviceId: deviceId.value,
-      name: '测试设备',
-      manufacturer: '太行科技',
-      hostAddress: '192.168.1.100',
-      online: 1,
-      id: 'mock-device-001'
-    }
-    return
+  
+  if (!deviceId.value) {
+    return Promise.reject(new Error('设备ID为空，请从设备列表选择一个设备'))
   }
   
-  axios({
-    method: 'get',
-    url: `/api/device/query/devices/${deviceId.value}`,
-    timeout: 5000
-  }).then((res) => {
-    if (res.data.code === 0) {
-      device.value = res.data.data
-    } else {
+  return new Promise((resolve, reject) => {
+    axios({
+      method: 'get',
+      url: `/api/device/query/devices/${deviceId.value}`,
+      timeout: 8000
+    }).then((res) => {
+      if (res.data.code === 0) {
+        device.value = res.data.data
+        console.log('获取设备信息成功:', device.value)
+        resolve(device.value)
+      } else {
+        const error = new Error(res.data.msg || '获取设备信息失败')
+        ElMessage.error({
+          showClose: true,
+          message: res.data.msg || '获取设备信息失败，请确认设备ID是否正确',
+          duration: 5000
+        })
+        reject(error)
+      }
+    }).catch((error) => {
+      console.error('获取设备信息错误:', error)
       ElMessage.error({
         showClose: true,
-        message: res.data.msg || '获取设备信息失败'
+        message: '获取设备信息失败:' + (error.message || '未知错误') + '，请检查网络连接或API服务状态',
+        duration: 5000
       })
-      // 创建模拟设备数据
-      device.value = {
-        deviceId: deviceId.value,
-        name: '测试设备',
-        manufacturer: '太行科技',
-        hostAddress: '192.168.1.100',
-        online: 1,
-        id: 'mock-device-001'
-      }
-    }
-  }).catch((error) => {
-    console.error('获取设备信息错误:', error)
-    ElMessage.error({
-      showClose: true,
-      message: '获取设备信息失败:' + (error.message || '未知错误')
+      reject(error)
     })
-    // 创建模拟设备数据
-    device.value = {
-      deviceId: deviceId.value,
-      name: '测试设备',
-      manufacturer: '太行科技',
-      hostAddress: '192.168.1.100',
-      online: 1,
-      id: 'mock-device-001'
-    }
   })
 }
 
 // 初始化数据
 const initData = () => {
-  
   if (!deviceId.value) {
     console.warn('initData: deviceId为空，无法获取通道列表')
     return
@@ -413,6 +420,8 @@ const initData = () => {
 
 // 初始化参数
 const initParam = () => {
+  console.log('initParam被调用 - 当前路由:', route.fullPath, '参数:', route.params, '查询:', route.query)
+  
   // 确保使用String转换，避免类型问题
   if (route.params.deviceId) {
     deviceId.value = String(route.params.deviceId)
@@ -423,7 +432,6 @@ const initParam = () => {
   } else {
     parentChannelId.value = '0'
   }
-  
   
   // 重置分页相关参数
   currentPage.value = 1
@@ -443,7 +451,7 @@ const initParam = () => {
     }
   } else {
     // 如果是子通道，设置返回路径为父通道页面
-    const parentPath = `/${String(route.name)}/${deviceId.value}/0`
+    const parentPath = route.name ? `/${String(route.name)}/${deviceId.value}/0` : `/channelList/${deviceId.value}/0`
     if (route.query.from) {
       // 保留来源信息
       beforeUrl.value = parentPath
@@ -452,7 +460,9 @@ const initParam = () => {
     }
   }
   
-  console.log('设置返回路径:', beforeUrl.value)
+  // 清空当前数据，防止新旧数据混淆
+  deviceChannelList.value = []
+  total.value = 0
 }
 
 // 分页相关
@@ -468,6 +478,7 @@ const handleSizeChange = (val) => {
 
 // 获取设备通道列表
 const getDeviceChannelList = () => {
+  
   if (!deviceId.value) {
     console.warn('deviceId为空，无法获取通道列表')
     // 在UI中显示设备选择提示
@@ -475,15 +486,6 @@ const getDeviceChannelList = () => {
       showClose: true,
       message: '请从设备列表选择一个设备'
     })
-    // 加载模拟数据，便于展示
-    loadMockChannelData()
-    return
-  }
-
-  // 如果API不可用，直接使用模拟数据
-  if (!apiAvailable.value) {
-    console.log('API不可用，使用模拟通道数据')
-    loadMockChannelData()
     return
   }
 
@@ -495,6 +497,17 @@ const getDeviceChannelList = () => {
     channelType: channelType.value
   })
 
+  // 更新加载状态
+  ElMessage({
+    showClose: false,
+    message: '正在加载通道列表...',
+    type: 'info',
+    duration: 2000
+  })
+
+  // 记录使用的是真实API数据
+  window.localStorage.setItem('usingRealApiData', 'true')
+
   axios({
     method: 'get',
     url: `/api/device/query/devices/${deviceId.value}/channels`,
@@ -505,7 +518,7 @@ const getDeviceChannelList = () => {
       online: online.value,
       channelType: channelType.value
     },
-    timeout: 5000
+    timeout: 10000 // 增加超时时间，防止网络不稳定导致失败
   }).then((res) => {
     if (res.data.code === 0) {
       console.log('获取通道列表成功，总数:', res.data.data.total)
@@ -516,7 +529,6 @@ const getDeviceChannelList = () => {
         return item
       })
       
-      console.log('处理后的通道数据:', deviceChannelList.value)
       
       // 防止出现表格错位
       setTimeout(() => {
@@ -530,8 +542,9 @@ const getDeviceChannelList = () => {
         showClose: true,
         message: res.data.msg || '获取通道列表失败'
       })
-      // 加载模拟数据
-      loadMockChannelData()
+      // 显示空列表
+      deviceChannelList.value = []
+      total.value = 0
     }
   }).catch((error) => {
     console.error('获取通道列表错误:', error)
@@ -539,106 +552,144 @@ const getDeviceChannelList = () => {
       showClose: true,
       message: '获取通道列表失败: ' + (error.message || '未知错误')
     })
-    // 加载模拟数据
-    loadMockChannelData()
+    // 显示空列表
+    deviceChannelList.value = []
+    total.value = 0
   })
-}
-
-// 加载模拟通道数据
-const loadMockChannelData = () => {
-  console.log('加载模拟通道数据')
-  
-  // 如果没有设备信息，创建模拟设备
-  if (!device.value) {
-    device.value = {
-      deviceId: deviceId.value,
-      name: '测试设备',
-      manufacturer: '太行科技',
-      hostAddress: '192.168.1.100',
-      online: 1,
-      id: 'mock-device-001'
-    }
-  }
-  
-  const mockChannels = []
-  const totalItems = 15
-  
-  for (let i = 1; i <= totalItems; i++) {
-    const channelId = `34020000001320000${i}`
-    const status = i % 3 === 0 ? 'OFF' : 'ON'
-    
-    mockChannels.push({
-      id: `channel_${i}`,
-      deviceId: channelId,
-      deviceDbId: device.value.id,
-      channelId: channelId,
-      name: `测试通道 ${i}`,
-      manufacturer: '太行科技',
-      status: status,
-      ptzType: String(i % 8),
-      streamIdentification: 'stream:0',
-      hasAudio: i % 2 === 0,
-      longitude: 116.123 + (i * 0.01),
-      latitude: 39.456 + (i * 0.01),
-      subCount: i % 5 === 0 ? 3 : 0,
-      playLoading: false
-    })
-  }
-  
-  deviceChannelList.value = mockChannels
-  total.value = mockChannels.length
-  
-  // 让表格正确布局
-  setTimeout(() => {
-    if (channelListTable.value) {
-      channelListTable.value.doLayout()
-    }
-  }, 100)
 }
 
 // 发送设备推流请求
 const sendDevicePush = (itemData) => {
   itemData.playLoading = true
   
-  axios({
-    method: 'get',
-    url: `/api/play/start/${deviceId.value}/${itemData.deviceId}`,
-    params: {
-      isSubStream: false // TODO: 根据实际情况设置
+  // 重试计数器和最大重试次数
+  let retryCount = 0
+  const maxRetries = 2
+  
+  // 尝试不同协议的播放方法
+  const protocols = ['HTTP', 'RTSP', 'RTMP']
+  let currentProtocolIndex = 0
+  
+  const tryPlayStream = () => {
+    const currentProtocol = protocols[currentProtocolIndex]
+    
+    // 添加认证头和跨域支持
+    const headers = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      // 如果需要，添加授权头
+      // 'Authorization': 'Bearer ' + token
     }
-  }).then((res) => {
-    if (res.data.code === 0) {
-      // 5秒后获取快照
-      setTimeout(() => {
-        let snapId = deviceId.value + "_" + itemData.deviceId
-        loadSnap.value[deviceId.value + itemData.deviceId] = 0
-        getSnapErrorEvent(snapId)
-      }, 5000)
+    
+    
+    axios({
+      method: 'get',
+      url: `/api/play/start/${deviceId.value}/${itemData.deviceId}`,
+      params: {
+        isSubStream: itemData.streamIdentification ? itemData.streamIdentification.includes('1') : false,
+        protocol: currentProtocol,
+        transportMode: currentProtocol === 'RTSP' ? 'TCP' : undefined, // RTSP使用TCP传输模式
+        port: currentProtocol === 'HTTP' ? 18085 : undefined // 为HTTP指定端口
+      },
+      headers: headers,
+      timeout: 15000 // 增加超时时间
+    }).then((res) => {
+      if (res.data.code === 0) {
+        
+        // 5秒后获取快照
+        setTimeout(() => {
+          let snapId = deviceId.value + "_" + itemData.deviceId
+          loadSnap.value[deviceId.value + itemData.deviceId] = 0
+          getSnapErrorEvent(snapId)
+        }, 5000)
+        
+        itemData.streamId = res.data.data.stream
+        devicePlayerRef.value.openDialog("media", deviceId.value, itemData.deviceId, {
+          streamInfo: res.data.data,
+          hasAudio: itemData.hasAudio
+        })
+        
+        setTimeout(() => {
+          initData()
+        }, 1000)
+        
+        itemData.playLoading = false
+        ElMessage.success({
+          showClose: true,
+          message: `推流成功 (${currentProtocol})`
+        })
+      } else {
+        console.warn('推流返回错误:', res.data)
+        
+        // 尝试使用下一个协议或重试
+        if (currentProtocolIndex < protocols.length - 1) {
+          currentProtocolIndex++
+          tryPlayStream()
+        } else if (retryCount < maxRetries) {
+          retryCount++
+          currentProtocolIndex = 0 // 重置协议索引
+          setTimeout(tryPlayStream, 1000) // 延迟1秒后重试
+        } else {
+          itemData.playLoading = false
+          ElMessage.warning({
+            showClose: true,
+            message: res.data.msg || '推流失败，请稍后重试'
+          })
+        }
+      }
+    }).catch((error) => {
+      console.error('推流错误:', error)
       
-      itemData.streamId = res.data.data.stream
-      devicePlayerRef.value.openDialog("media", deviceId.value, itemData.deviceId, {
-        streamInfo: res.data.data,
-        hasAudio: itemData.hasAudio
-      })
+      // 构建更有用的错误信息
+      let errorMsg = '未知错误'
+      let shouldRetry = true
       
-      setTimeout(() => {
-        initData()
-      }, 1000)
-    } else {
+      if (error.response) {
+        if (error.response.status === 403) {
+          errorMsg = '权限不足，无法访问流媒体服务器 (403 Forbidden)'
+        } else if (error.response.status === 401) {
+          errorMsg = '未授权，请检查认证信息 (401 Unauthorized)'
+          shouldRetry = false // 认证问题，不重试
+        } else if (error.response.status === 404) {
+          errorMsg = '请求的资源不存在 (404 Not Found)'
+        } else if (error.response.status === 500) {
+          errorMsg = '服务器内部错误 (500)'
+        } else {
+          errorMsg = `服务器错误: ${error.response.status} ${error.response.statusText}`
+        }
+      } else if (error.request) {
+        errorMsg = '无法连接到服务器，请检查网络连接'
+      } else if (error.message) {
+        errorMsg = error.message
+      }
+      
+      // 尝试使用下一个协议或重试
+      if (shouldRetry) {
+        if (currentProtocolIndex < protocols.length - 1) {
+          currentProtocolIndex++
+          console.log(`服务器错误后切换到${protocols[currentProtocolIndex]}协议尝试播放`)
+          tryPlayStream()
+          return
+        } else if (retryCount < maxRetries) {
+          retryCount++
+          currentProtocolIndex = 0 // 重置协议索引
+          console.log(`服务器错误后重置协议选择并重试播放 (${retryCount}/${maxRetries})`)
+          setTimeout(tryPlayStream, 1000) // 延迟1秒后重试
+          return
+        }
+      }
+      
+      // 所有尝试都失败
+      itemData.playLoading = false
       ElMessage.error({
         showClose: true,
-        message: res.data.msg || '发送推流请求失败'
+        message: '推流失败: ' + errorMsg
       })
-    }
-  }).catch((e) => {
-    console.error('发送推流请求错误:', e)
-    ElMessage.error({
-      showClose: true,
-      message: '发送推流请求失败: ' + (e.message || '未知错误')
     })
-  }).finally(() => {
-    itemData.playLoading = false
-  })
+  }
+  
+  // 开始尝试播放
+  tryPlayStream()
 }
 
 // 停止设备推流
@@ -825,14 +876,6 @@ const changeSubchannel = (itemData) => {
 
 // 显示子通道
 const showSubchannels = () => {
-  console.log('开始获取子通道，设备ID:', deviceId.value, '父通道ID:', parentChannelId.value)
-  
-  // 如果API不可用，直接使用模拟数据
-  if (!apiAvailable.value) {
-    console.log('API不可用，使用模拟子通道数据')
-    loadMockSubchannels()
-    return
-  }
   
   if (!showTree.value) {
     axios({
@@ -848,7 +891,6 @@ const showSubchannels = () => {
       timeout: 5000
     }).then((res) => {
       if (res.data.code === 0) {
-        console.log('获取子通道列表成功，总数:', res.data.data.total)
         total.value = res.data.data.total
         deviceChannelList.value = res.data.data.list.map(item => {
           item.ptzType = String(item.ptzType)
@@ -868,8 +910,9 @@ const showSubchannels = () => {
           showClose: true,
           message: res.data.msg || '获取子通道列表失败'
         })
-        // 加载模拟子通道数据
-        loadMockSubchannels()
+        // 显示空列表
+        deviceChannelList.value = []
+        total.value = 0
       }
     }).catch((error) => {
       console.error('获取子通道列表错误:', error)
@@ -877,8 +920,9 @@ const showSubchannels = () => {
         showClose: true,
         message: '获取子通道列表失败:' + (error.message || '未知错误')
       })
-      // 加载模拟子通道数据
-      loadMockSubchannels()
+      // 显示空列表
+      deviceChannelList.value = []
+      total.value = 0
     })
   } else {
     axios({
@@ -892,7 +936,6 @@ const showSubchannels = () => {
       timeout: 5000
     }).then((res) => {
       if (res.data.code === 0) {
-        console.log('获取通道树成功，总数:', res.data.total)
         total.value = res.data.total
         deviceChannelList.value = res.data.list.map(item => {
           item.ptzType = String(item.ptzType || '0')
@@ -912,8 +955,9 @@ const showSubchannels = () => {
           showClose: true,
           message: res.data.msg || '获取通道树失败'
         })
-        // 加载模拟子通道数据
-        loadMockSubchannels()
+        // 显示空列表
+        deviceChannelList.value = []
+        total.value = 0
       }
     }).catch((error) => {
       console.error('获取通道树错误:', error)
@@ -921,50 +965,11 @@ const showSubchannels = () => {
         showClose: true,
         message: '获取通道树失败:' + (error.message || '未知错误')
       })
-      // 加载模拟子通道数据
-      loadMockSubchannels()
+      // 显示空列表
+      deviceChannelList.value = []
+      total.value = 0
     })
   }
-}
-
-// 加载模拟子通道数据
-const loadMockSubchannels = () => {
-  console.log('加载模拟子通道数据')
-  
-  const mockChannels = []
-  const totalItems = 5
-  
-  for (let i = 1; i <= totalItems; i++) {
-    const channelId = `340200000013200${parentChannelId.value}${i}`
-    const status = i % 3 === 0 ? 'OFF' : 'ON'
-    
-    mockChannels.push({
-      id: `subchannel_${i}`,
-      deviceId: channelId,
-      deviceDbId: device.value?.id || 'mock-device-001',
-      channelId: channelId,
-      name: `子通道 ${parentChannelId.value}-${i}`,
-      manufacturer: '太行科技',
-      status: status,
-      ptzType: String(i % 8),
-      streamIdentification: 'stream:0',
-      hasAudio: i % 2 === 0,
-      longitude: 116.123 + (i * 0.01),
-      latitude: 39.456 + (i * 0.01),
-      subCount: 0,
-      playLoading: false
-    })
-  }
-  
-  deviceChannelList.value = mockChannels
-  total.value = mockChannels.length
-  
-  // 让表格正确布局
-  setTimeout(() => {
-    if (channelListTable.value) {
-      channelListTable.value.doLayout()
-    }
-  }, 100)
 }
 
 // 搜索
@@ -1050,6 +1055,22 @@ const refresh = () => {
 
 // 编辑通道
 const handleEdit = (row) => {
+  // 检查row和row.id是否存在
+  if (!row || !row.id) {
+    console.error('无法编辑通道: 通道ID无效', row)
+    ElMessage.error({
+      showClose: true,
+      message: '无法编辑通道: 通道ID无效'
+    })
+    return
+  }
+  
+  // 保存更多通道信息到localStorage，以便编辑组件获取
+  window.localStorage.setItem('currentDeviceId', deviceId.value)
+  window.localStorage.setItem('currentChannelData', JSON.stringify(row))
+  console.log('保存通道信息到localStorage:', deviceId.value, row.id, row)
+  
+  // 跳转到编辑页面
   editId.value = row.id
 }
 

@@ -89,26 +89,30 @@ export const constantRoutes: RouteRecordRaw[] = [
       }
     ]
   },
-  // 视频监控路由
+  // 视频监控相关路由 - 设置为隐藏
   {
-    path: '/wvp',
+    path: '/deviceList',
     component: Layout,
-    redirect: '/deviceList',
-    name: 'WVP',
-    meta: { title: '视频监控', icon: 'video-camera' },
+    hidden: true,
     children: [
       {
-        path: '/deviceList',
+        path: '',
         component: () => import('@/views/wvp/DeviceList.vue'),
         name: 'DeviceList',
         meta: { title: '设备列表', icon: 'list', noCache: true }
-      },
+      }
+    ]
+  },
+  {
+    path: '/channelList',
+    component: Layout,
+    hidden: true,
+    children: [
       {
-        path: '/channelList/:deviceId/:parentChannelId',
+        path: ':deviceId/:parentChannelId',
         component: () => import('@/views/wvp/ChannelList.vue'),
         name: 'ChannelList',
-        meta: { title: '通道列表', icon: 'list', noCache: true, activeMenu: '/deviceList' },
-        hidden: true
+        meta: { title: '通道列表', icon: 'list', noCache: true }
       }
     ]
   }
